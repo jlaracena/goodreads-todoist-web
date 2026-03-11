@@ -1,64 +1,92 @@
 {% extends "books/base.html" %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h5 class="mb-0 text-muted">{{ books|length }} libros</h5>
-  <small class="text-muted">Click en columna para ordenar</small>
+
+<div id="loading" class="text-center py-5">
+  <div class="spinner-border text-secondary mb-3" style="width:3rem;height:3rem;" role="status"></div>
+  <p class="text-muted">Cargando libros desde Goodreads…</p>
 </div>
 
-<div class="table-responsive">
-  <table class="table table-sm table-hover table-striped" id="bookTable">
-    <thead class="table-dark">
-      <tr>
-        <th data-col="0">#</th>
-        <th data-col="1">Título</th>
-        <th data-col="2">Páginas</th>
-        <th data-col="3">Rating</th>
-        <th data-col="4">Nº ratings</th>
-        <th data-col="5">Score</th>
-        <th data-col="6">Score/pág</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for b in books %}
-      <tr>
-        <td>{{ forloop.counter }}</td>
-        <td><a class="book-link" href="{{ b.link }}" target="_blank">{{ b.title }}</a></td>
-        <td>{{ b.num_pages|floatformat:0 }}</td>
-        <td>{{ b.average_rating|floatformat:2 }}</td>
-        <td>{{ b.ratings_count|floatformat:0 }}</td>
-        <td>
-          {{ b.score|floatformat:3 }}
-          <div class="score-bar mt-1" style="width: {{ b.score_pct }}%"></div>
-        </td>
-        <td>{{ b.score_per_page|floatformat:3 }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div id="content" style="display:none">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0 text-muted"><span id="book-count"></span> libros</h5>
+    <small class="text-muted">Click en columna para ordenar</small>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-sm table-hover table-striped" id="bookTable">
+      <thead class="table-dark">
+        <tr>
+          <th data-col="0">#</th>
+          <th data-col="1">Título</th>
+          <th data-col="2">Páginas</th>
+          <th data-col="3">Rating</th>
+          <th data-col="4">Nº ratings</th>
+          <th data-col="5">Score</th>
+          <th data-col="6">Score/pág</th>
+        </tr>
+      </thead>
+      <tbody id="bookTbody"></tbody>
+    </table>
+  </div>
 </div>
+
+<div id="error" style="display:none" class="alert alert-danger mt-4"></div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-  const table = document.getElementById('bookTable');
-  let sortAsc = {};
-  document.querySelectorAll('th[data-col]').forEach(th => {
-    th.addEventListener('click', () => {
-      const col = +th.dataset.col;
-      sortAsc[col] = !sortAsc[col];
-      const tbody = table.querySelector('tbody');
-      const rows = Array.from(tbody.querySelectorAll('tr'));
-      rows.sort((a, b) => {
-        const av = a.cells[col].innerText.trim();
-        const bv = b.cells[col].innerText.trim();
-        const an = parseFloat(av.replace(/,/g, ''));
-        const bn = parseFloat(bv.replace(/,/g, ''));
-        const cmp = isNaN(an) ? av.localeCompare(bv) : an - bn;
-        return sortAsc[col] ? cmp : -cmp;
-      });
-      rows.forEach(r => tbody.appendChild(r));
-      tbody.querySelectorAll('tr').forEach((r, i) => r.cells[0].innerText = i + 1);
+  const API_URL = "{{ api_url }}";
+
+  function renderBooks(books) {
+    const tbody = document.getElementById('bookTbody');
+    tbody.innerHTML = books.map((b, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td><a class="book-link" href="${b.link}" target="_blank">${b.title}</a></td>
+        <td>${b.num_pages}</td>
+        <td>${b.average_rating.toFixed(2)}</td>
+        <td>${b.ratings_count.toLocaleString()}</td>
+        <td>
+          ${b.score.toFixed(3)}
+          <div class="score-bar mt-1" style="width:${b.score_pct}%"></div>
+        </td>
+        <td>${b.score_per_page.toFixed(3)}</td>
+      </tr>
+    `).join('');
+    document.getElementById('book-count').textContent = books.length;
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display = '';
+  }
+
+  fetch(API_URL)
+    .then(r => r.json())
+    .then(data => renderBooks(data.books))
+    .catch(err => {
+      document.getElementById('loading').style.display = 'none';
+      const el = document.getElementById('error');
+      el.textContent = 'Error cargando datos: ' + err;
+      el.style.display = '';
     });
+
+  // Ordenamiento de columnas
+  let sortAsc = {};
+  document.querySelector('thead').addEventListener('click', e => {
+    const th = e.target.closest('th[data-col]');
+    if (!th) return;
+    const col = +th.dataset.col;
+    sortAsc[col] = !sortAsc[col];
+    const tbody = document.getElementById('bookTbody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    rows.sort((a, b) => {
+      const av = a.cells[col].innerText.trim();
+      const bv = b.cells[col].innerText.trim();
+      const an = parseFloat(av.replace(/[,.]/g, m => m === ',' ? '' : '.'));
+      const bn = parseFloat(bv.replace(/[,.]/g, m => m === ',' ? '' : '.'));
+      const cmp = isNaN(an) ? av.localeCompare(bv) : an - bn;
+      return sortAsc[col] ? cmp : -cmp;
+    });
+    rows.forEach(r => tbody.appendChild(r));
+    tbody.querySelectorAll('tr').forEach((r, i) => r.cells[0].innerText = i + 1);
   });
 </script>
 {% endblock %}

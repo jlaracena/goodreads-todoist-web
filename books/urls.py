@@ -6,4 +6,6 @@ urlpatterns = [
     path('per-page/', views.lista_per_page, name='lista_per_page'),
     path('own-paper/', views.lista_own_paper, name='lista_own_paper'),
     path('plan/', views.plan, name='plan'),
+    # Endpoints JSON para carga asíncrona
+    path('api/shelf/<str:shelf>/', views.api_shelf, name='api_shelf'),
 ]

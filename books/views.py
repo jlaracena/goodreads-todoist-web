@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import requests
 from decouple import config
+from django.http import JsonResponse
 from django.shortcuts import render
 
 GOODREADS_API_KEY = config('GOODREADS_API_KEY')
@@ -19,6 +20,8 @@ HEADERS = {
 
 _cache: dict = {}
 CACHE_TTL = 30 * 60  # 30 minutos
+
+VALID_SHELVES = {"to-read", "own-paper"}
 
 
 def fetch_shelf_page(shelf, page):
@@ -33,7 +36,6 @@ def fetch_shelf_page(shelf, page):
 
 
 def parse_page(xml_text):
-    """Devuelve (rows, total_books) leyendo el atributo total del XML."""
     root = et.fromstring(xml_text)
     reviews = root.find("reviews")
     total = int(reviews.attrib.get("total", 0)) if reviews is not None else 0
@@ -64,8 +66,6 @@ def build_df(rows):
         + 1.25 * (1 - np.exp(-df["ratings_count"] / 720000))
         + 1.25 * (1 - np.exp(-(300 / (1 + df["num_pages"]))))
     )
-
-    # Normalizar score a porcentaje para la barra visual (relativo al máximo del shelf)
     df["score_pct"] = (df["score"] / df["score"].max() * 100).round(0).astype(int)
 
     return df.drop_duplicates(subset=["title"])
@@ -77,12 +77,10 @@ def get_shelf(shelf):
         if time.time() - ts < CACHE_TTL:
             return data
 
-    # Primera página: obtener libros y total real del shelf
     first_rows, total = parse_page(fetch_shelf_page(shelf, 1))
     rows = first_rows
 
-    total_pages = ceil(total / 200)
-    for page in range(2, total_pages + 1):
+    for page in range(2, ceil(total / 200) + 1):
         try:
             new_rows, _ = parse_page(fetch_shelf_page(shelf, page))
             rows.extend(new_rows)
@@ -94,29 +92,52 @@ def get_shelf(shelf):
     return result
 
 
+# ── Vistas de página (responden instantáneo) ──────────────────────────────────
+
 def lista(request):
-    df = get_shelf("to-read").sort_values("score", ascending=False)
     return render(request, "books/lista.html", {
-        "books": df.to_dict("records"),
         "active_tab": "rating",
+        "api_url": "/api/shelf/to-read/?sort=score",
     })
 
 
 def lista_per_page(request):
-    df = get_shelf("to-read").sort_values("score_per_page", ascending=False)
     return render(request, "books/lista.html", {
-        "books": df.to_dict("records"),
         "active_tab": "per_page",
+        "api_url": "/api/shelf/to-read/?sort=score_per_page",
     })
 
 
 def lista_own_paper(request):
-    df = get_shelf("own-paper").sort_values("score_per_page", ascending=False)
     return render(request, "books/lista.html", {
-        "books": df.to_dict("records"),
         "active_tab": "own_paper",
+        "api_url": "/api/shelf/own-paper/?sort=score_per_page",
     })
 
+
+# ── Endpoint JSON (carga los datos en background) ─────────────────────────────
+
+def api_shelf(request, shelf):
+    if shelf not in VALID_SHELVES:
+        return JsonResponse({"error": "shelf no válido"}, status=400)
+
+    sort = request.GET.get("sort", "score")
+    if sort not in ("score", "score_per_page"):
+        sort = "score"
+
+    df = get_shelf(shelf).sort_values(sort, ascending=False)
+
+    books = df[["title", "num_pages", "average_rating", "ratings_count", "score", "score_per_page", "score_pct", "link"]].copy()
+    books["num_pages"] = books["num_pages"].round(0).astype(int)
+    books["average_rating"] = books["average_rating"].round(2)
+    books["ratings_count"] = books["ratings_count"].round(0).astype(int)
+    books["score"] = books["score"].round(3)
+    books["score_per_page"] = books["score_per_page"].round(3)
+
+    return JsonResponse({"books": books.to_dict("records")})
+
+
+# ── Plan de lectura ───────────────────────────────────────────────────────────
 
 def plan(request):
     today = datetime.now()
