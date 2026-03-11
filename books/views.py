@@ -1,14 +1,20 @@
+import json
+import subprocess
 import time
 import xml.etree.ElementTree as et
 from datetime import datetime, timedelta
 from math import ceil
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import requests
 from decouple import config
 from django.http import JsonResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
+
+READING_STATE_FILE = Path.home() / "Code/scripts/data/reading_state.json"
+READING_SCRIPT = Path.home() / "Code/scripts/reading_plan_todoist.py"
 
 GOODREADS_API_KEY = config('GOODREADS_API_KEY')
 GOODREADS_USER_ID = config('GOODREADS_USER_ID')
@@ -203,4 +209,78 @@ def plan(request):
         "progress_pct": progress_pct,
         "pages_per_day": pages_per_day,
         "pct_per_day": pct_per_day,
+    })
+
+
+# ── Libro actual ──────────────────────────────────────────────────────────────
+
+def _load_reading_state():
+    if READING_STATE_FILE.exists():
+        return json.loads(READING_STATE_FILE.read_text())
+    return {}
+
+def _save_reading_state(state):
+    READING_STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False))
+
+
+def libro(request):
+    msg = None
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        state = _load_reading_state()
+
+        if action == "save":
+            state["current_book"]  = request.POST.get("current_book", "").strip()
+            state["total_pages"]   = int(request.POST.get("total_pages", 0))
+            state["pages_per_day"] = float(request.POST.get("pages_per_day", 0))
+            state["use_percentage"] = request.POST.get("use_percentage") == "on"
+            state["goal"]          = int(request.POST.get("goal", 24))
+            state["task_id"]       = None  # nueva tarea en Todoist
+            _save_reading_state(state)
+            msg = ("success", "Libro guardado. Se creará una tarea nueva en Todoist al ejecutar el script.")
+
+        elif action == "run":
+            try:
+                result = subprocess.run(
+                    ["/opt/homebrew/bin/python3", str(READING_SCRIPT)],
+                    capture_output=True, text=True, timeout=30
+                )
+                if result.returncode == 0:
+                    msg = ("success", result.stdout.strip() or "Script ejecutado correctamente.")
+                else:
+                    msg = ("danger", result.stderr.strip() or "Error al ejecutar el script.")
+            except subprocess.TimeoutExpired:
+                msg = ("danger", "Timeout: el script tardó más de 30 segundos.")
+            except Exception as e:
+                msg = ("danger", f"Error: {e}")
+
+        return redirect("libro") if msg is None else render(request, "books/libro.html", {
+            "active_tab": "libro",
+            "state": _load_reading_state(),
+            "msg": msg,
+        })
+
+    state = _load_reading_state()
+
+    # Calcular progreso estimado del libro actual
+    book_progress = None
+    if state.get("total_pages") and state.get("pages_per_day"):
+        total = state["total_pages"]
+        ppd   = state["pages_per_day"]
+        today = datetime.now()
+        end   = datetime(today.year, 12, 31, 23, 59)
+        books_remaining = state.get("goal", 24) - state.get("books_read_baseline", 0)
+        days_remaining  = (end - today).days
+        dpb = days_remaining / books_remaining if books_remaining > 0 else 0
+        book_progress = {
+            "days_for_book": round(dpb, 1),
+            "total_sessions": ceil(total / ppd) if ppd > 0 else 0,
+        }
+
+    return render(request, "books/libro.html", {
+        "active_tab": "libro",
+        "state": state,
+        "book_progress": book_progress,
+        "msg": msg,
     })
