@@ -185,13 +185,24 @@ def plan(request):
     pages_per_day = pct_per_day = None
     if days_per_book > 0:
         if current_pages > 0:
-            # Modo páginas
             pages_remaining = current_pages - pages_read
             pages_per_day = round(pages_remaining / days_per_book, 1)
             pct_per_day = round(pages_remaining / current_pages / days_per_book * 100, 1)
+            # Guardar ritmo automáticamente en reading_state
+            state = _load_reading_state()
+            state["total_pages"]    = current_pages
+            state["pages_per_day"]  = pages_per_day
+            state["use_percentage"] = False
+            state["goal"]           = goal
+            _save_reading_state(state)
         elif 0 < progress_pct < 100:
-            # Modo porcentaje: solo calcula % por día
             pct_per_day = round((100 - progress_pct) / days_per_book, 1)
+            state = _load_reading_state()
+            state["total_pages"]    = 0
+            state["pages_per_day"]  = pct_per_day
+            state["use_percentage"] = True
+            state["goal"]           = goal
+            _save_reading_state(state)
 
     return render(request, "books/plan.html", {
         "active_tab": "plan",
@@ -230,25 +241,19 @@ def libro(request):
         action = request.POST.get("action")
         state = _load_reading_state()
 
-        if action in ("save", "save_from_plan"):
-            if action == "save":
-                state["current_book"] = request.POST.get("current_book", "").strip()
-                state["task_id"] = None  # nueva tarea en Todoist
-            state["total_pages"]    = int(request.POST.get("total_pages", 0))
-            state["pages_per_day"]  = float(request.POST.get("pages_per_day", 0))
-            state["use_percentage"] = request.POST.get("use_percentage") == "on"
-            state["goal"]           = int(request.POST.get("goal", 24))
+        if action == "save":
+            state["current_book"] = request.POST.get("current_book", "").strip()
+            state["task_id"] = None  # nueva tarea en Todoist
             _save_reading_state(state)
-            if action == "save_from_plan":
-                msg = ("success", "Ritmo guardado desde el plan. Ahora ve a Libro actual, pon el nombre y ejecuta.")
-            else:
-                msg = ("success", "Libro guardado. Se creará una tarea nueva en Todoist al ejecutar el script.")
+            msg = ("success", "Libro guardado. Se creará una tarea nueva en Todoist al ejecutar el script.")
 
         elif action == "run":
             try:
+                env = os.environ.copy()
+                env["TODOIST_TOKEN"] = config("TODOIST_TOKEN")
                 result = subprocess.run(
                     ["/opt/homebrew/bin/python3", str(READING_SCRIPT)],
-                    capture_output=True, text=True, timeout=30
+                    capture_output=True, text=True, timeout=30, env=env
                 )
                 if result.returncode == 0:
                     msg = ("success", result.stdout.strip() or "Script ejecutado correctamente.")
