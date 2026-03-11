@@ -149,7 +149,11 @@
           <input type="hidden" name="current_pages" value="{{ current_pages }}">
           <input type="hidden" name="pages_read" value="{{ pages_read }}">
           <input type="hidden" name="progress_pct" value="{{ progress_pct }}">
-          <button type="submit" class="btn btn-sm btn-outline-dark w-100 mt-2">▶ Ejecutar en Todoist ahora</button>
+          <div class="mb-2">
+            <label class="form-label form-label-sm text-muted">Etiquetas en Todoist <span class="text-muted">(opcional, separadas por coma)</span></label>
+            <input type="text" name="labels" value="{{ labels_str }}" class="form-control form-control-sm" placeholder="ej: reading, books">
+          </div>
+          <button type="submit" class="btn btn-sm btn-outline-dark w-100">▶ Ejecutar en Todoist ahora</button>
         </form>
       </div>
     </div>

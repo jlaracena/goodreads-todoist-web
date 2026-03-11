@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import sys
 import time
 import xml.etree.ElementTree as et
 from datetime import datetime, timedelta
@@ -48,12 +49,15 @@ def parse_page(xml_text):
     total = int(reviews.attrib.get("total", 0)) if reviews is not None else 0
     rows = []
     for book in root.findall("./reviews/review/book"):
+        def _text(tag):
+            el = book.find(tag)
+            return el.text if el is not None else None
         rows.append({
-            "title": book.find("title").text,
-            "num_pages": book.find("num_pages").text,
-            "average_rating": book.find("average_rating").text,
-            "ratings_count": book.find("ratings_count").text,
-            "link": book.find("link").text,
+            "title": _text("title"),
+            "num_pages": _text("num_pages"),
+            "average_rating": _text("average_rating"),
+            "ratings_count": _text("ratings_count"),
+            "link": _text("link"),
         })
     return rows, total
 
@@ -151,8 +155,11 @@ def plan(request):
     end_date = datetime(today.year, 12, 31, 23, 59)
 
     params = request.POST if request.method == "POST" else request.GET
-    books_read = int(params.get("books_read", 2))
-    goal = int(params.get("goal", 24))
+    try:
+        books_read = max(0, int(params.get("books_read", 2)))
+        goal = max(1, int(params.get("goal", 24)))
+    except (ValueError, TypeError):
+        books_read, goal = 2, 24
 
     books_remaining = goal - books_read
     days_remaining = (end_date - today).days
@@ -181,9 +188,17 @@ def plan(request):
         })
 
     current_book  = params.get("current_book", "").strip()
-    current_pages = int(params.get("current_pages", 0))
-    pages_read    = int(params.get("pages_read", 0))
-    progress_pct  = float(params.get("progress_pct", 0))
+    try:
+        current_pages = max(0, int(params.get("current_pages", 0)))
+        pages_read    = max(0, int(params.get("pages_read", 0)))
+        progress_pct  = max(0.0, min(99.9, float(params.get("progress_pct", 0))))
+    except (ValueError, TypeError):
+        current_pages = pages_read = 0
+        progress_pct = 0.0
+    if current_pages > 0 and pages_read > current_pages:
+        pages_read = current_pages
+    labels_raw    = params.get("labels", "")
+    labels        = [l.strip() for l in labels_raw.split(",") if l.strip()]
 
     pages_per_day = pct_per_day = run_msg = None
     if days_per_book > 0:
@@ -202,6 +217,8 @@ def plan(request):
             state["current_book"] = current_book
             state["task_id"] = None
         state["books_read"] = books_read
+        if labels:
+            state["labels"] = labels
         if pages_per_day or pct_per_day:
             _save_reading_state(state)
 
@@ -211,15 +228,19 @@ def plan(request):
             env = os.environ.copy()
             env["TODOIST_TOKEN"] = config("TODOIST_TOKEN")
             result = subprocess.run(
-                ["/opt/homebrew/bin/python3", str(READING_SCRIPT)],
+                [sys.executable, str(READING_SCRIPT)],
                 capture_output=True, text=True, timeout=30, env=env
             )
             run_msg = ("success", result.stdout.strip()) if result.returncode == 0 \
                       else ("danger", result.stderr.strip())
+        except subprocess.TimeoutExpired:
+            run_msg = ("danger", "Timeout: el script tardó más de 30 segundos.")
         except Exception as e:
             run_msg = ("danger", str(e))
 
     reading_state = _load_reading_state()
+    saved_labels  = reading_state.get("labels", [])
+    labels_str    = labels_raw if labels_raw else ", ".join(saved_labels)
 
     return render(request, "books/plan.html", {
         "active_tab": "plan",
@@ -240,6 +261,7 @@ def plan(request):
         "pct_per_day": pct_per_day,
         "reading_state": reading_state,
         "run_msg": run_msg,
+        "labels_str": labels_str,
     })
 
 
@@ -251,6 +273,7 @@ def _load_reading_state():
     return {}
 
 def _save_reading_state(state):
+    READING_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     READING_STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False))
 
 
@@ -272,7 +295,7 @@ def libro(request):
                 env = os.environ.copy()
                 env["TODOIST_TOKEN"] = config("TODOIST_TOKEN")
                 result = subprocess.run(
-                    ["/opt/homebrew/bin/python3", str(READING_SCRIPT)],
+                    [sys.executable, str(READING_SCRIPT)],
                     capture_output=True, text=True, timeout=30, env=env
                 )
                 if result.returncode == 0:
