@@ -1,0 +1,65 @@
+{% extends "books/base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h5 class="mb-0 text-muted">{{ books|length }} libros</h5>
+  <small class="text-muted">Click en columna para ordenar</small>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-sm table-hover table-striped" id="bookTable">
+    <thead class="table-dark">
+      <tr>
+        <th data-col="0">#</th>
+        <th data-col="1">Título</th>
+        <th data-col="2">Páginas</th>
+        <th data-col="3">Rating</th>
+        <th data-col="4">Nº ratings</th>
+        <th data-col="5">Score</th>
+        <th data-col="6">Score/pág</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for b in books %}
+      <tr>
+        <td>{{ forloop.counter }}</td>
+        <td><a class="book-link" href="{{ b.link }}" target="_blank">{{ b.title }}</a></td>
+        <td>{{ b.num_pages|floatformat:0 }}</td>
+        <td>{{ b.average_rating|floatformat:2 }}</td>
+        <td>{{ b.ratings_count|floatformat:0 }}</td>
+        <td>
+          {{ b.score|floatformat:3 }}
+          <div class="score-bar mt-1" style="width: {{ b.score|floatformat:0 }}0%"></div>
+        </td>
+        <td>{{ b.score_per_page|floatformat:3 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const table = document.getElementById('bookTable');
+  let sortAsc = {};
+  document.querySelectorAll('th[data-col]').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = +th.dataset.col;
+      sortAsc[col] = !sortAsc[col];
+      const tbody = table.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      rows.sort((a, b) => {
+        const av = a.cells[col].innerText.trim();
+        const bv = b.cells[col].innerText.trim();
+        const an = parseFloat(av.replace(/,/g, ''));
+        const bn = parseFloat(bv.replace(/,/g, ''));
+        const cmp = isNaN(an) ? av.localeCompare(bv) : an - bn;
+        return sortAsc[col] ? cmp : -cmp;
+      });
+      rows.forEach(r => tbody.appendChild(r));
+      // renumber
+      tbody.querySelectorAll('tr').forEach((r, i) => r.cells[0].innerText = i + 1);
+    });
+  });
+</script>
+{% endblock %}

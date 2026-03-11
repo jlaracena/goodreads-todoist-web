@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+db.sqlite3
+*.sqlite3
+.DS_Store
+venv/
+env/
+com.jinshi.goodreads.plist
