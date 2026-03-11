@@ -150,6 +150,19 @@ def plan(request):
     days_remaining = (end_date - today).days
     days_per_book = days_remaining / books_remaining if books_remaining > 0 else 0
 
+    # Ritmo esperado: cuántos libros deberías haber leído hasta hoy
+    start_of_year = datetime(today.year, 1, 1)
+    total_days = (end_date - start_of_year).days
+    days_elapsed = (today - start_of_year).days
+    expected_books = round(goal * days_elapsed / total_days, 1)
+    books_diff = round(books_read - expected_books, 1)
+    if books_diff >= 1:
+        pace_status = "ahead"
+    elif books_diff <= -1:
+        pace_status = "behind"
+    else:
+        pace_status = "on_track"
+
     schedule = []
     date = today
     for i in range(books_remaining):
@@ -178,6 +191,9 @@ def plan(request):
         "active_tab": "plan",
         "books_read": books_read,
         "goal": goal,
+        "expected_books": expected_books,
+        "books_diff": abs(books_diff),
+        "pace_status": pace_status,
         "books_remaining": books_remaining,
         "days_remaining": days_remaining,
         "days_per_book": round(days_per_book, 1),
