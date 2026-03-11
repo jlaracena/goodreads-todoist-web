@@ -1,13 +1,13 @@
 {% extends "books/base.html" %}
 {% block content %}
-<h4 class="mb-4">Plan de lectura {{ goal }} libros en {{ goal|add:"-0" }} — 2026</h4>
+<h4 class="mb-4">Plan de lectura {{ goal }} libros — 2026</h4>
 
 <div class="row g-4 mb-4">
   <div class="col-md-5">
     <div class="card shadow-sm">
       <div class="card-body">
         <h6 class="card-title text-muted">Ajustar parámetros</h6>
-        <form method="get" action="/plan/">
+        <form method="get" action="{% url 'plan' %}">
           <div class="mb-2">
             <label class="form-label form-label-sm">Libros leídos</label>
             <input type="number" name="books_read" value="{{ books_read }}" class="form-control form-control-sm" min="0">

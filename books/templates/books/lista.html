@@ -28,7 +28,7 @@
         <td>{{ b.ratings_count|floatformat:0 }}</td>
         <td>
           {{ b.score|floatformat:3 }}
-          <div class="score-bar mt-1" style="width: {{ b.score|floatformat:0 }}0%"></div>
+          <div class="score-bar mt-1" style="width: {{ b.score_pct }}%"></div>
         </td>
         <td>{{ b.score_per_page|floatformat:3 }}</td>
       </tr>
@@ -57,7 +57,6 @@
         return sortAsc[col] ? cmp : -cmp;
       });
       rows.forEach(r => tbody.appendChild(r));
-      // renumber
       tbody.querySelectorAll('tr').forEach((r, i) => r.cells[0].innerText = i + 1);
     });
   });

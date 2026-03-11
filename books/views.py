@@ -1,7 +1,9 @@
 import math
+import time
 import xml.etree.ElementTree as et
 from datetime import datetime, timedelta
 
+import numpy as np
 import pandas as pd
 import requests
 from decouple import config
@@ -14,6 +16,9 @@ HEADERS = {
     "User-Agent": "PostmanRuntime/7.37.3",
     "Accept": "*/*",
 }
+
+_cache: dict = {}
+CACHE_TTL = 30 * 60  # 30 minutos
 
 
 def fetch_shelf_page(shelf, page):
@@ -43,45 +48,56 @@ def parse_books(xml_text):
 
 def build_df(rows):
     df = pd.DataFrame(rows, columns=["title", "num_pages", "average_rating", "ratings_count", "link"])
-    df["num_pages"] = pd.to_numeric(df["num_pages"], errors="coerce")
-    df["average_rating"] = pd.to_numeric(df["average_rating"], errors="coerce")
-    df["ratings_count"] = pd.to_numeric(df["ratings_count"], errors="coerce")
-    df["num_pages"].fillna(df["num_pages"].mean(), inplace=True)
-    df["average_rating"].fillna(df["average_rating"].mean(), inplace=True)
-    df["ratings_count"].fillna(df["ratings_count"].mean(), inplace=True)
+    for col in ["num_pages", "average_rating", "ratings_count"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+        df[col] = df[col].fillna(df[col].mean())
 
-    df["score"] = df.apply(
-        lambda r: (5 * r.average_rating / 10) + 2.5 * (1 - math.exp(-r.ratings_count / 720000)),
-        axis=1,
+    df["score"] = (
+        (5 * df["average_rating"] / 10)
+        + 2.5 * (1 - np.exp(-df["ratings_count"] / 720000))
     )
-    df["score_per_page"] = df.apply(
-        lambda r: (0.5 * r.average_rating)
-        + 1.25 * (1 - math.exp(-r.ratings_count / 720000))
-        + 1.25 * (1 - math.exp(-(300 / (1 + r.num_pages)))),
-        axis=1,
+    df["score_per_page"] = (
+        0.5 * df["average_rating"]
+        + 1.25 * (1 - np.exp(-df["ratings_count"] / 720000))
+        + 1.25 * (1 - np.exp(-(300 / (1 + df["num_pages"]))))
     )
+
+    # Normalizar score a porcentaje para la barra visual (relativo al máximo del shelf)
+    df["score_pct"] = (df["score"] / df["score"].max() * 100).round(0).astype(int)
+
     return df.drop_duplicates(subset=["title"])
 
 
 def get_shelf(shelf, max_pages=18):
+    key = (shelf, max_pages)
+    if key in _cache:
+        ts, data = _cache[key]
+        if time.time() - ts < CACHE_TTL:
+            return data
+
     rows = []
-    for page in range(1, max_pages + 1):
+    # La primera página debe funcionar; las siguientes pueden fallar silenciosamente
+    first_page = fetch_shelf_page(shelf, 1)
+    rows.extend(parse_books(first_page))
+
+    for page in range(2, max_pages + 1):
         try:
-            xml = fetch_shelf_page(shelf, page)
-            new_rows = parse_books(xml)
+            new_rows = parse_books(fetch_shelf_page(shelf, page))
             if not new_rows:
                 break
             rows.extend(new_rows)
         except Exception:
             break
-    return build_df(rows)
+
+    result = build_df(rows)
+    _cache[key] = (time.time(), result)
+    return result
 
 
 def lista(request):
     df = get_shelf("to-read").sort_values("score", ascending=False)
     return render(request, "books/lista.html", {
         "books": df.to_dict("records"),
-        "sort": "score",
         "active_tab": "rating",
     })
 
@@ -90,7 +106,6 @@ def lista_per_page(request):
     df = get_shelf("to-read").sort_values("score_per_page", ascending=False)
     return render(request, "books/lista.html", {
         "books": df.to_dict("records"),
-        "sort": "score_per_page",
         "active_tab": "per_page",
     })
 
@@ -99,7 +114,6 @@ def lista_own_paper(request):
     df = get_shelf("own-paper", max_pages=3).sort_values("score_per_page", ascending=False)
     return render(request, "books/lista.html", {
         "books": df.to_dict("records"),
-        "sort": "score_per_page",
         "active_tab": "own_paper",
     })
 
@@ -120,19 +134,17 @@ def plan(request):
     schedule = []
     date = today
     for i in range(books_remaining):
+        date += timedelta(days=days_per_book)
         schedule.append({
             "book_num": books_read + i + 1,
-            "deadline": (date + timedelta(days=days_per_book)).strftime("%d-%m-%Y"),
+            "deadline": date.strftime("%d-%m-%Y"),
         })
-        date += timedelta(days=days_per_book)
 
-    pages_per_day = None
+    pages_per_day = pct_per_day = None
     if current_pages > 0 and days_per_book > 0:
-        pages_per_day = round((current_pages - pages_read) / days_per_book, 1)
-
-    pct_per_day = None
-    if current_pages > 0 and days_per_book > 0:
-        pct_per_day = round(((current_pages - pages_read) / current_pages) / days_per_book * 100, 1)
+        pages_remaining = current_pages - pages_read
+        pages_per_day = round(pages_remaining / days_per_book, 1)
+        pct_per_day = round(pages_remaining / current_pages / days_per_book * 100, 1)
 
     return render(request, "books/plan.html", {
         "active_tab": "plan",
