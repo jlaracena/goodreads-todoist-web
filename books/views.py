@@ -193,7 +193,7 @@ def plan(request):
             pages_per_day = round(pages_remaining / days_per_book, 1)
             pct_per_day   = round(pages_remaining / current_pages / days_per_book * 100, 1)
             state.update({"total_pages": current_pages, "pages_per_day": pages_per_day,
-                          "use_percentage": False, "goal": goal})
+                          "use_percentage": False, "goal": goal, "current_page": pages_read})
         elif 0 < progress_pct < 100:
             pct_per_day = round((100 - progress_pct) / days_per_book, 1)
             state.update({"total_pages": 0, "pages_per_day": pct_per_day,
