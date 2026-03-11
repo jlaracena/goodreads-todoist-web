@@ -77,7 +77,7 @@ GOODREADS_USER_ID=your-goodreads-user-id
 TODOIST_TOKEN=your-todoist-api-token
 ```
 
-The `GOODREADS_USER_ID` is the identifier from your profile URL on Goodreads (e.g. `7069563-john`).
+The `GOODREADS_USER_ID` is the identifier from your profile URL on Goodreads (e.g. `123456789-john`).
 
 To generate a Django secret key:
 ```bash
