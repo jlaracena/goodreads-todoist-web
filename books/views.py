@@ -201,6 +201,7 @@ def plan(request):
         if current_book:
             state["current_book"] = current_book
             state["task_id"] = None
+        state["books_read"] = books_read
         if pages_per_day or pct_per_day:
             _save_reading_state(state)
 
