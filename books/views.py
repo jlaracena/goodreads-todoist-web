@@ -1,7 +1,7 @@
-import math
 import time
 import xml.etree.ElementTree as et
 from datetime import datetime, timedelta
+from math import ceil
 
 import numpy as np
 import pandas as pd
@@ -32,8 +32,11 @@ def fetch_shelf_page(shelf, page):
     return r.text
 
 
-def parse_books(xml_text):
+def parse_page(xml_text):
+    """Devuelve (rows, total_books) leyendo el atributo total del XML."""
     root = et.fromstring(xml_text)
+    reviews = root.find("reviews")
+    total = int(reviews.attrib.get("total", 0)) if reviews is not None else 0
     rows = []
     for book in root.findall("./reviews/review/book"):
         rows.append({
@@ -43,7 +46,7 @@ def parse_books(xml_text):
             "ratings_count": book.find("ratings_count").text,
             "link": book.find("link").text,
         })
-    return rows
+    return rows, total
 
 
 def build_df(rows):
@@ -68,29 +71,26 @@ def build_df(rows):
     return df.drop_duplicates(subset=["title"])
 
 
-def get_shelf(shelf, max_pages=18):
-    key = (shelf, max_pages)
-    if key in _cache:
-        ts, data = _cache[key]
+def get_shelf(shelf):
+    if shelf in _cache:
+        ts, data = _cache[shelf]
         if time.time() - ts < CACHE_TTL:
             return data
 
-    rows = []
-    # La primera página debe funcionar; las siguientes pueden fallar silenciosamente
-    first_page = fetch_shelf_page(shelf, 1)
-    rows.extend(parse_books(first_page))
+    # Primera página: obtener libros y total real del shelf
+    first_rows, total = parse_page(fetch_shelf_page(shelf, 1))
+    rows = first_rows
 
-    for page in range(2, max_pages + 1):
+    total_pages = ceil(total / 200)
+    for page in range(2, total_pages + 1):
         try:
-            new_rows = parse_books(fetch_shelf_page(shelf, page))
-            if not new_rows:
-                break
+            new_rows, _ = parse_page(fetch_shelf_page(shelf, page))
             rows.extend(new_rows)
         except Exception:
             break
 
     result = build_df(rows)
-    _cache[key] = (time.time(), result)
+    _cache[shelf] = (time.time(), result)
     return result
 
 
@@ -111,7 +111,7 @@ def lista_per_page(request):
 
 
 def lista_own_paper(request):
-    df = get_shelf("own-paper", max_pages=3).sort_values("score_per_page", ascending=False)
+    df = get_shelf("own-paper").sort_values("score_per_page", ascending=False)
     return render(request, "books/lista.html", {
         "books": df.to_dict("records"),
         "active_tab": "own_paper",
