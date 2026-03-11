@@ -10,86 +10,28 @@
 {% endif %}
 
 <div class="row g-4">
-  <div class="col-md-6">
-    <div class="card shadow-sm">
+  <div class="col-md-5">
+
+    <div class="card shadow-sm mb-3">
       <div class="card-body">
-        <h6 class="card-title text-muted mb-3">Configurar libro</h6>
+        <h6 class="card-title text-muted mb-3">Nombre del libro</h6>
         <form method="post" action="{% url 'libro' %}">
           {% csrf_token %}
           <input type="hidden" name="action" value="save">
-
-          <div class="mb-2">
-            <label class="form-label form-label-sm">Nombre del libro</label>
+          <div class="mb-3">
             <input type="text" name="current_book" value="{{ state.current_book }}"
                    class="form-control form-control-sm" placeholder="ej: AI Engineering">
+            <div class="form-text">El ritmo (páginas/día) se calcula en el tab <a href="{% url 'plan' %}">Plan anual</a>.</div>
           </div>
-          <div class="mb-2">
-            <label class="form-label form-label-sm">Total de páginas <span class="text-muted">(0 si usas %)</span></label>
-            <input type="number" name="total_pages" value="{{ state.total_pages }}"
-                   class="form-control form-control-sm" min="0">
-          </div>
-          <div class="mb-2">
-            <label class="form-label form-label-sm">Páginas (o %) por día</label>
-            <input type="number" name="pages_per_day" value="{{ state.pages_per_day }}"
-                   class="form-control form-control-sm" min="0" step="0.1">
-          </div>
-          <div class="mb-2">
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" name="use_percentage" id="usePct"
-                     {% if state.use_percentage %}checked{% endif %}>
-              <label class="form-check-label form-label-sm" for="usePct">Usar porcentaje en vez de páginas</label>
-            </div>
-          </div>
-          <div class="mb-3">
-            <label class="form-label form-label-sm">Meta de libros del año</label>
-            <input type="number" name="goal" value="{{ state.goal }}"
-                   class="form-control form-control-sm" min="1">
-          </div>
-
-          <div class="d-grid gap-2">
-            <button type="submit" class="btn btn-sm btn-dark">
-              Guardar y crear nueva tarea en Todoist
-            </button>
-          </div>
+          <button type="submit" class="btn btn-sm btn-dark w-100">Guardar y resetear tarea Todoist</button>
         </form>
       </div>
     </div>
-  </div>
-
-  <div class="col-md-6 d-flex flex-column gap-3">
-
-    {% if state.current_book and state.current_book != "NOMBRE DEL LIBRO" %}
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <h6 class="card-title text-muted mb-3">Estado actual</h6>
-        <p class="mb-1"><strong>📖 {{ state.current_book }}</strong></p>
-        {% if state.use_percentage %}
-          <p class="mb-1 text-muted small">{{ state.pages_per_day }}% por día</p>
-        {% else %}
-          <p class="mb-1 text-muted small">{{ state.pages_per_day|floatformat:0 }} páginas por día
-            {% if state.total_pages %} · {{ state.total_pages }} páginas totales{% endif %}
-          </p>
-        {% endif %}
-        {% if book_progress %}
-          <p class="mb-1 text-muted small">~{{ book_progress.total_sessions }} sesiones para completar el libro</p>
-          <p class="mb-0 text-muted small">{{ book_progress.days_for_book }} días disponibles según plan anual</p>
-        {% endif %}
-        {% if state.task_id %}
-          <p class="mt-2 mb-0 text-muted small">✅ Tarea Todoist activa: <code>{{ state.task_id }}</code></p>
-        {% else %}
-          <p class="mt-2 mb-0 text-warning small">⚠ Sin tarea activa — ejecuta el script para crearla</p>
-        {% endif %}
-      </div>
-    </div>
-    {% endif %}
 
     <div class="card shadow-sm">
       <div class="card-body">
-        <h6 class="card-title text-muted mb-2">Ejecutar script ahora</h6>
-        <p class="text-muted small mb-3">
-          Avanza las páginas de hoy y actualiza la prioridad en Todoist.
-          Normalmente corre automático a la 1:00am.
-        </p>
+        <h6 class="card-title text-muted mb-2">Ejecutar ahora</h6>
+        <p class="text-muted small mb-3">Avanza las páginas de hoy y actualiza la prioridad en Todoist. Corre automático a la 1:00am.</p>
         <form method="post" action="{% url 'libro' %}">
           {% csrf_token %}
           <input type="hidden" name="action" value="run">
@@ -98,6 +40,64 @@
       </div>
     </div>
 
+  </div>
+
+  <div class="col-md-7">
+    {% if state.current_book and state.current_book != "NOMBRE DEL LIBRO" %}
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h6 class="card-title text-muted mb-3">Estado actual</h6>
+        <p class="mb-2 fs-5"><strong>📖 {{ state.current_book }}</strong></p>
+        <table class="table table-sm table-borderless mb-0">
+          <tr>
+            <td class="text-muted">Ritmo diario</td>
+            <td>
+              {% if state.use_percentage %}
+                {{ state.pages_per_day }}% por día
+              {% else %}
+                {{ state.pages_per_day|floatformat:0 }} páginas/día
+              {% endif %}
+            </td>
+          </tr>
+          {% if state.total_pages %}
+          <tr>
+            <td class="text-muted">Total páginas</td>
+            <td>{{ state.total_pages }}</td>
+          </tr>
+          {% if book_progress %}
+          <tr>
+            <td class="text-muted">Sesiones para terminar</td>
+            <td>~{{ book_progress.total_sessions }} días</td>
+          </tr>
+          <tr>
+            <td class="text-muted">Días disponibles (plan)</td>
+            <td>{{ book_progress.days_for_book }}</td>
+          </tr>
+          {% endif %}
+          {% endif %}
+          <tr>
+            <td class="text-muted">Tarea Todoist</td>
+            <td>
+              {% if state.task_id %}
+                ✅ Activa
+              {% else %}
+                <span class="text-warning">⚠ Sin tarea — ejecuta el script</span>
+              {% endif %}
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+    {% else %}
+    <div class="text-muted mt-3">
+      <p>Pasos para empezar un libro nuevo:</p>
+      <ol>
+        <li>Ve a <a href="{% url 'plan' %}">Plan anual</a>, ingresa las páginas del libro y calcula el ritmo</li>
+        <li>Haz click en <strong>→ Guardar ritmo en libro actual</strong></li>
+        <li>Vuelve aquí, escribe el nombre del libro y haz click en <strong>Ejecutar ahora</strong></li>
+      </ol>
+    </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

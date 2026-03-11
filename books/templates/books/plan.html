@@ -121,6 +121,21 @@
       </div>
       {% endif %}
     </div>
+
+    {% if pages_per_day or pct_per_day %}
+    <form method="post" action="{% url 'libro' %}">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="save_from_plan">
+      <input type="hidden" name="total_pages" value="{{ current_pages }}">
+      <input type="hidden" name="pages_per_day" value="{% if pages_per_day %}{{ pages_per_day }}{% else %}{{ pct_per_day }}{% endif %}">
+      <input type="hidden" name="use_percentage" value="{% if pct_per_day and not pages_per_day %}on{% endif %}">
+      <input type="hidden" name="goal" value="{{ goal }}">
+      <button type="submit" class="btn btn-sm btn-outline-dark w-100">
+        → Guardar ritmo en libro actual
+      </button>
+    </form>
+    {% endif %}
+
   </div>
 </div>
 

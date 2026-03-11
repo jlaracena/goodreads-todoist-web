@@ -230,15 +230,19 @@ def libro(request):
         action = request.POST.get("action")
         state = _load_reading_state()
 
-        if action == "save":
-            state["current_book"]  = request.POST.get("current_book", "").strip()
-            state["total_pages"]   = int(request.POST.get("total_pages", 0))
-            state["pages_per_day"] = float(request.POST.get("pages_per_day", 0))
+        if action in ("save", "save_from_plan"):
+            if action == "save":
+                state["current_book"] = request.POST.get("current_book", "").strip()
+                state["task_id"] = None  # nueva tarea en Todoist
+            state["total_pages"]    = int(request.POST.get("total_pages", 0))
+            state["pages_per_day"]  = float(request.POST.get("pages_per_day", 0))
             state["use_percentage"] = request.POST.get("use_percentage") == "on"
-            state["goal"]          = int(request.POST.get("goal", 24))
-            state["task_id"]       = None  # nueva tarea en Todoist
+            state["goal"]           = int(request.POST.get("goal", 24))
             _save_reading_state(state)
-            msg = ("success", "Libro guardado. Se creará una tarea nueva en Todoist al ejecutar el script.")
+            if action == "save_from_plan":
+                msg = ("success", "Ritmo guardado desde el plan. Ahora ve a Libro actual, pon el nombre y ejecuta.")
+            else:
+                msg = ("success", "Libro guardado. Se creará una tarea nueva en Todoist al ejecutar el script.")
 
         elif action == "run":
             try:
